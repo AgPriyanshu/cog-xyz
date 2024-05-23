@@ -1,12 +1,11 @@
+import io
 import math
 
+import matplotlib.pyplot as plt
+from helpers import download_s3_range
 import rasterio
 import tifffile
-from typing import List
-import pdb
 from PIL import Image
-import io
-import matplotlib.pyplot as plt
 
 
 def tile2latlon(x, y, z):
@@ -60,7 +59,7 @@ def latlon2tile(latitude, longitude, zoom):
     return x_tile, y_tile
 
 
-def get_tile_byte_ranges(tiff_path, tile_indices, page_number):
+def get_tile_byte_ranges(tiff_path, tile_index, page_number):
     """
     Read TIFF tile byte ranges from a TIFF file.
 
@@ -80,11 +79,10 @@ def get_tile_byte_ranges(tiff_path, tile_indices, page_number):
         tile_offsets = page.tags["TileOffsets"].value
         tile_byte_counts = page.tags["TileByteCounts"].value
 
-        for index in tile_indices:
-            if index < len(tile_offsets) and index < len(tile_byte_counts):
-                offset = tile_offsets[index]
-                length = tile_byte_counts[index]
-                byte_ranges[index] = (offset, offset + length - 1)
+        if tile_index < len(tile_offsets) and tile_index < len(tile_byte_counts):
+            offset = tile_offsets[tile_index]
+            length = tile_byte_counts[tile_index]
+            byte_ranges[tile_index] = (offset, offset + length - 1)
 
     return byte_ranges
 
@@ -115,8 +113,8 @@ def find_page_number_for_overview(tiff_path, desired_scale):
 def calculate_tile_range():
     cog_path = "./begunia_ortho_cog.tif"
     zoom_level = 21
-    tile_x = 1555498
-    tile_y = 905671
+    tile_x = 1555496
+    tile_y = 905659
     tile_size = 256
 
     with rasterio.open(cog_path) as src:
@@ -129,26 +127,34 @@ def calculate_tile_range():
             pixel_x = (tile_x * tile_size) // overview_factor
             pixel_y = (tile_y * tile_size) // overview_factor
 
-            # Determine the tile index within the overview level
+            # Determine the tile index within the overview level.
             tiles_across = src.width // (tile_size * overview_factor)
             tile_index = (pixel_y // tile_size) * tiles_across + (pixel_x // tile_size)
 
-        byte_ranges = get_tile_byte_ranges(cog_path, [tile_index], page_number)
+        byte_ranges = get_tile_byte_ranges(cog_path, tile_index, page_number)
 
-        byte_range = byte_ranges[tile_index]
         print(f"Byte Ranges for the requested tile: {byte_ranges}")
-        with open(cog_path, "rb") as file:
-            file.seek(byte_range[0])  # Move to the start of the tile data
 
-            tile_data = file.read(
-                byte_range[1] - byte_range[0] + 1
-            )  # Read the specified byte range
+        # byte_range = byte_ranges[tile_index]
+        # with open(cog_path, "rb") as file:
+        #     file.seek(byte_range[0])  # Move to the start of the tile data
 
-            image_stream = io.BytesIO(tile_data)
-            image = Image.open(image_stream)
-            image = image.convert("RGB")  # Ensure it's in RGB format
-            plt.imshow(image)
-            plt.show()
+        #     tile_data = file.read(
+        #         byte_range[1] - byte_range[0] + 1
+        #     )  # Read the specified byte range
+
+        #     image_stream = io.BytesIO(tile_data)
+        #     image = Image.open(image_stream)
+        #     image = image.convert("RGB")  # Ensure it's in RGB format
+        #     plt.imshow(image)
+        #     plt.show()
+
+        download_s3_range(
+            "rb-iterations-dev",
+            "orthomosaic_cog/43fa5993-f451-4fde-9967-2850a12bf5a2.tif",
+            byte_ranges[tile_index],
+            "./copy.tif",
+        )
 
 
 if __name__ == "__main__":
